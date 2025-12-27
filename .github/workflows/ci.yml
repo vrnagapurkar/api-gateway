@@ -1,9 +1,8 @@
 name: ci
 
 on:
-  pull_request:
   push:
-    branches: ["main"]
+  pull_request:
 
 jobs:
   test:
@@ -34,3 +33,12 @@ jobs:
         run: |
           go build ./cmd/gateway
           go build ./cmd/controlplane
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Docker build (gateway)
+        run: docker build -f Dockerfile.gateway -t api-gateway:ci .
+
+      - name: Docker build (controlplane)
+        run: docker build -f Dockerfile.controlplane -t controlplane:ci .
