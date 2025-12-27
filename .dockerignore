@@ -1,0 +1,13 @@
+.git
+.github
+**/.DS_Store
+**/*.log
+
+# build outputs
+**/bin
+**/dist
+**/out
+
+# Go caches
+**/.cache
+**/coverage*
