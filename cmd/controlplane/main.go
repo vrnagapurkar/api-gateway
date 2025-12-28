@@ -4,20 +4,19 @@ import (
 	"log"
 	"net/http"
 	"os"
+
+	"github.com/vrnagapurkar/api-gateway/internal/controlplane"
 )
 
 func main() {
 	port := getenv("PORT", "8081")
 
-	mux := http.NewServeMux()
-	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("ok\n"))
-	})
+	store := controlplane.NewStore()
+	srv := controlplane.NewServer(store)
 
 	addr := ":" + port
 	log.Printf("controlplane listening on %s", addr)
-	if err := http.ListenAndServe(addr, mux); err != nil {
+	if err := http.ListenAndServe(addr, srv.Routes()); err != nil {
 		log.Fatalf("controlplane server error: %v", err)
 	}
 }
