@@ -44,3 +44,21 @@ Later sections will include:
 - **Route:** a match rule (path + optional headers) that maps to a destination service
 - **Service:** a logical backend with one or more endpoints (URLs)
 - **Config snapshot:** versioned services + routes served by control plane for gateway polling
+
+## Run with Docker Compose
+
+Build and start the stack:
+```bash
+docker compose up --build
+```
+
+```md
+## CI
+GitHub Actions runs on every push/PR:
+- gofmt check
+- go test
+- compile check
+- docker builds for gateway and control plane
+
+
+
