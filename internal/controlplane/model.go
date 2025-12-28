@@ -7,7 +7,7 @@ type Service struct {
 
 type Route struct {
 	Name        string      `json:"name"`
-	Match       RouteMatch   `json:"match"`
+	Match       RouteMatch  `json:"match"`
 	Destination Destination `json:"destination"`
 }
 
