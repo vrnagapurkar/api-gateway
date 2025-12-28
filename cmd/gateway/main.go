@@ -44,7 +44,7 @@ func main() {
 
 		// Basic timeouts (simple production hygiene)
 		proxy.Transport = &http.Transport{
-			Proxy:               http.ProxyFromEnvironment,
+			Proxy:                 http.ProxyFromEnvironment,
 			ResponseHeaderTimeout: 5 * time.Second,
 		}
 
