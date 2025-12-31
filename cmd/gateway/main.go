@@ -1,23 +1,28 @@
 package main
 
 import (
+	"context"
 	"log"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
 	"os"
-	"strings"
 	"time"
+
+	"github.com/vrnagapurkar/api-gateway/internal/gateway"
 )
 
 func main() {
 	port := getenv("PORT", "8080")
+	controlPlaneURL := getenv("CONTROL_PLANE_URL", "http://localhost:8081")
+	pollInterval := 5 * time.Second
 
-	// Hardcoded routes for Day 3
-	routes := []route{
-		{prefix: "/a", upstream: "http://service-a:8080"},
-		{prefix: "/b", upstream: "http://service-b:8080"},
-	}
+	cfg := &gateway.AtomicConfig{}
+	poller := gateway.NewPoller(controlPlaneURL, pollInterval, cfg)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go poller.Run(ctx)
 
 	mux := http.NewServeMux()
 
@@ -26,38 +31,33 @@ func main() {
 		_, _ = w.Write([]byte("ok\n"))
 	})
 
-	// Catch-all handler for proxying
+	// Ready = has loaded a config at least once
+	mux.HandleFunc("/readyz", func(w http.ResponseWriter, r *http.Request) {
+		if cfg.Load() == nil {
+			http.Error(w, "not ready\n", http.StatusServiceUnavailable)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("ready\n"))
+	})
+
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		upstream, ok := matchRoute(r.URL.Path, routes)
+		snap := cfg.Load()
+		up, ok := gateway.ResolveUpstream(r, snap)
 		if !ok {
 			http.Error(w, "no route matched\n", http.StatusNotFound)
 			return
 		}
 
-		targetURL, err := url.Parse(upstream)
+		target, err := url.Parse(up.URL)
 		if err != nil {
 			http.Error(w, "invalid upstream\n", http.StatusInternalServerError)
 			return
 		}
 
-		proxy := httputil.NewSingleHostReverseProxy(targetURL)
-
-		// Basic timeouts (simple production hygiene)
-		proxy.Transport = &http.Transport{
-			Proxy:                 http.ProxyFromEnvironment,
-			ResponseHeaderTimeout: 5 * time.Second,
-		}
-
-		// Preserve original path (so /a/hello reaches service-a)
-		originalDirector := proxy.Director
-		proxy.Director = func(req *http.Request) {
-			originalDirector(req)
-			// Keep path as-is
-			req.URL.Path = r.URL.Path
-		}
-
+		proxy := httputil.NewSingleHostReverseProxy(target)
 		proxy.ErrorHandler = func(rw http.ResponseWriter, req *http.Request, e error) {
-			log.Printf("proxy error upstream=%s path=%s err=%v", upstream, r.URL.Path, e)
+			log.Printf("proxy error upstream=%s path=%s err=%v", up.URL, r.URL.Path, e)
 			http.Error(rw, "upstream error\n", http.StatusBadGateway)
 		}
 
@@ -65,24 +65,10 @@ func main() {
 	})
 
 	addr := ":" + port
-	log.Printf("gateway listening on %s", addr)
+	log.Printf("gateway listening on %s (control plane: %s)", addr, controlPlaneURL)
 	if err := http.ListenAndServe(addr, mux); err != nil {
 		log.Fatalf("gateway server error: %v", err)
 	}
-}
-
-type route struct {
-	prefix   string
-	upstream string
-}
-
-func matchRoute(path string, routes []route) (string, bool) {
-	for _, rt := range routes {
-		if strings.HasPrefix(path, rt.prefix) {
-			return rt.upstream, true
-		}
-	}
-	return "", false
 }
 
 func getenv(key, def string) string {
